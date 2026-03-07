@@ -214,6 +214,56 @@ theorem traceNorm_convex (M N : Matrix n n R) (l : ℝ) (hl : 0 ≤ l ∧ l ≤ 
   simp_rw [← RCLike.ofReal_sub, RCLike.norm_ofReal]
   rw [abs_of_nonneg (hl.1), abs_of_nonneg (sub_nonneg.mpr (hl.2))]
 
+open scoped Kronecker
+
+lemma nonneg_kronecker (A : Matrix n n R) (B : Matrix m m R) (hA : 0 ≤ A) (hB : 0 ≤ B) :
+  0 ≤ (A ⊗ₖ B) := by
+  rw [CStarAlgebra.nonneg_iff_eq_star_mul_self] at hA hB ⊢
+  obtain ⟨C, rfl⟩ := hA
+  obtain ⟨D, rfl⟩ := hB
+  use C ⊗ₖ D
+  simp [Matrix.mul_kronecker_mul]
+  simp_rw [star_eq_conjTranspose, Matrix.conjTranspose_kronecker]
+
+lemma PosSemidef_kronecker (A : Matrix n n R) (B : Matrix m m R) (hA : A.PosSemidef) (hB : B.PosSemidef) :
+  (A ⊗ₖ B).PosSemidef := by
+  rw [← Matrix.nonneg_iff_posSemidef]
+  exact nonneg_kronecker _ _ (sorry) sorry
+
+variable {d : Type*} [DecidableEq d]
+
+open MatrixOrder in
+lemma sqrt_kron_eq_kron_sqrt [DecidableEq n] [DecidableEq m] (A : Matrix n n R) (B : Matrix m m R) (hA : 0 ≤ A) (hB : 0 ≤ B) :
+  CFC.sqrt (A ⊗ₖ B) = CFC.sqrt A ⊗ₖ CFC.sqrt B := by
+    have h_sqrt_kronecker : (CFC.sqrt A ⊗ₖ CFC.sqrt B) * (CFC.sqrt A ⊗ₖ CFC.sqrt B) = A ⊗ₖ B := by
+      have h_expand : (CFC.sqrt A ⊗ₖ CFC.sqrt B) * (CFC.sqrt A ⊗ₖ CFC.sqrt B) = (CFC.sqrt A * CFC.sqrt A) ⊗ₖ (CFC.sqrt B * CFC.sqrt B) := by
+        exact Eq.symm (Matrix.mul_kronecker_mul (CFC.sqrt A) (CFC.sqrt A) (CFC.sqrt B) (CFC.sqrt B));
+      have h_sqrt : CFC.sqrt A * CFC.sqrt A = A ∧ CFC.sqrt B * CFC.sqrt B = B := by
+        exact ⟨ CFC.sqrt_mul_sqrt_self _, CFC.sqrt_mul_sqrt_self _ ⟩;
+      rw [ h_expand, h_sqrt.1, h_sqrt.2 ];
+    apply CFC.sqrt_unique _ _;
+    · exact h_sqrt_kronecker
+    · apply (nonneg_kronecker )
+      . exact CFC.sqrt_nonneg A
+      . exact CFC.sqrt_nonneg B
+
+/-- `Tr(A ⊗ₖ B) = Tr(A) * Tr(B)` -/
+theorem traceNorm_kron_eq_mul (A : Matrix n n R) (B : Matrix m m R) :
+  (A ⊗ₖ B).traceNorm = A.traceNorm * B.traceNorm := by
+  open MatrixOrder in
+  simp [traceNorm]
+  have h : (A ⊗ₖ B)ᴴ * (A ⊗ₖ B) = (Aᴴ * A) ⊗ₖ (Bᴴ * B) := by
+    simp [Matrix.conjTranspose_kronecker, Matrix.mul_kronecker_mul]
+  rw [h, Matrix.sqrt_kron_eq_kron_sqrt]
+  . rw [Matrix.trace_kronecker, RCLike.mul_re];
+    simp;
+    apply Or.inl
+    apply Matrix.PosSemidef.trace_of_posSemidef_is_real _
+    · rw [← Matrix.nonneg_iff_posSemidef]
+      exact CFC.sqrt_nonneg (Aᴴ * A)
+  . exact (posSemidef_conjTranspose_mul_self A).nonneg
+  . exact (posSemidef_conjTranspose_mul_self B).nonneg
+
 end traceNorm
 
 end Matrix

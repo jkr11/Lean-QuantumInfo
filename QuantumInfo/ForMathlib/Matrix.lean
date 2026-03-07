@@ -144,6 +144,14 @@ include hA in
 theorem trace_zero_iff : A.trace = 0 ↔ A = 0 :=
   ⟨trace_zero hA, (by simp [·])⟩
 
+omit dn in
+include hA in
+lemma trace_of_posSemidef_is_real :
+  RCLike.im A.trace = 0 := by
+    apply Matrix.PosSemidef.trace_nonneg at hA
+    rw [RCLike.nonneg_iff] at hA
+    exact hA.2
+
 --belongs somewhere else. compare with `Complex.normSq_eq_conj_mul_self`.
 open ComplexConjugate in
 theorem _root_.RCLike.normSq_eq_conj_mul_self {z : 𝕜} : RCLike.normSq z = conj z * z := by
