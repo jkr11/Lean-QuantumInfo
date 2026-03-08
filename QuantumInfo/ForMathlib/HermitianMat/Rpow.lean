@@ -277,7 +277,7 @@ lemma rpow_kron
   rw [h_kron_r_pow_diag, Matrix.unitary_kron]
   rw [rpow_conj_unitary, rpow_conj_unitary, ← conj_kron]
 
-attribute [fun_prop] ContinuousAt.rpow
+attribute [fun_prop] ContinuousAt.rpow ContinuousOn.rpow
 
 lemma continuousOn_rpow_uniform {K : Set ℝ} (hK : IsCompact K) :
     ContinuousOn (fun r : ℝ ↦ UniformOnFun.ofFun {K} (fun t : ℝ ↦ t ^ r)) (Set.Ioi 0) := by
@@ -312,38 +312,12 @@ theorem continuousOn_rpow_joint_nonneg_pos
     (hA : ContinuousOn A S) (hp : ContinuousOn p S)
     (hp_pos : ∀ x ∈ S, 0 < p x) :
     ContinuousOn (fun x ↦ A x ^ p x) S := by
-  intro x hx
-  obtain ⟨U, hU⟩ : ∃ U ∈ nhdsWithin x S, ∀ y ∈ U ∩ S, A y ∈ Set.Icc (A x - 1) (A x + 1) := by
-    use { y | A y ∈ Metric.ball (A x) 1 }
-    constructor
-    · exact hA.continuousWithinAt hx (Metric.ball_mem_nhds _ zero_lt_one)
-    · intro y hy
-      simpa using (A x).ball_subset_Icc 1 (by simpa using hy.1)
-  -- By `HermitianMat.spectrum_subset_of_mem_Icc`, there exist a, b such that all matrices in this Icc have spectrum ⊆ Set.Icc a b.
-  obtain ⟨a, b, hab⟩ : ∃ a b : ℝ, ∀ y ∈ U ∩ S, Set.range (A y).H.eigenvalues ⊆ Set.Icc a b := by
-    obtain ⟨a, b, h⟩ := (A x - 1).spectrum_subset_of_mem_Icc (A x + 1)
-    refine ⟨a, b, fun y hy ↦ ?_⟩
-    rw [← (A y).H.eigenvalues_eq_spectrum_real]
-    exact h (A y) (hU.2 y hy)
-  -- The function f(x, t) = t ^ p(x) is ContinuousOn on (S ×ˢ Set.Icc a b) because:
-  -- apply `ContinuousOn.rpow` to `fun q ↦ q.2` (continuous projection) and `fun q ↦ p q.1` (continuous since hp),
-  -- with the condition that p(q.1) > 0 (from hp_pos), so the disjunction `base ≠ 0 ∨ 0 < exponent` holds.
-  have h_cont_f : ContinuousOn (fun q : X × ℝ => q.2 ^ p q.1) (S ×ˢ Set.Icc a b) := by
+  have h_cont_f : ContinuousOn (fun q : X × ℝ => q.2 ^ p q.1) (S ×ˢ Set.univ) := by
+    -- fun_prop (disch := grind [Set.MapsTo]) --After BUMP - fix in discharger
     apply continuousOn_snd.rpow
-    · exact hp.comp continuousOn_fst fun x ↦ And.left
-    · exact fun x hx => Or.inr (hp_pos x.1 hx.1)
-  -- Apply `HermitianMat.continuous_cfc_joint` with T = Set.Icc a b on the restricted set
-  -- (preimage ∩ S) to get ContinuousOn on the neighborhood.
-  have h_cont_cfc : ContinuousOn (fun x => (A x).cfc (fun t => t ^ p x)) (U ∩ S) := by
-    apply HermitianMat.continuous_cfc_joint (hT := CompactIccSpace.isCompact_Icc (a := a) (b := b))
-    · exact h_cont_f.mono (Set.prod_mono Set.inter_subset_right Set.Subset.rfl)
-    · intro y hy
-      specialize hab y hy
-      rwa [(A y).H.spectrum_real_eq_range_eigenvalues ]
-    · exact hA.mono ( Set.inter_subset_right );
-  rw [ContinuousWithinAt]
-  convert h_cont_cfc.continuousWithinAt (show x ∈ U ∩ S from ⟨mem_of_mem_nhdsWithin (by aesop) hU.1, hx⟩) using 1
-  rw [ContinuousWithinAt, nhdsWithin_inter_of_mem hU.1]
-  rfl
+    · exact hp.comp continuousOn_fst (fun x ↦ And.left)
+    · grind
+  simp_rw [rpow_eq_cfc]
+  fun_prop (disch := simp)
 
 end continuity
