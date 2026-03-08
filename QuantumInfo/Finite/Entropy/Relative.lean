@@ -926,10 +926,48 @@ private theorem sandwichedRelRentropy.continuousOn_Ioi_1 (ρ σ : MState d) :
     · clear ρ σ hρ;
       grind only [→ Set.EqOn.eq_of_mem, = Set.mem_Ioi, Set.EqOn, cases Or]
 
+private theorem sandwichedRelRentropy.continuousOn_Ioo_0_1_aux (ρ σ : MState d) :
+    ContinuousOn (fun (α : ℝ) ↦ ((HermitianMat.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ρ.M ^ α)) (Set.Ioo 0 1) := by
+  have h_cont : ContinuousOn (fun α : ℝ => (HermitianMat.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ρ.M) (Set.Ioo 0 1) := by
+    have h_cont : ContinuousOn (fun α : ℝ => (σ.M ^ ((1 - α) / (2 * α))).mat) (Set.Ioo 0 1) := by
+      have h_cont : ContinuousOn (fun α : ℝ => σ.M ^ ((1 - α) / (2 * α))) (Set.Ioo 0 1) := by
+        have h_exp_cont : ContinuousOn (fun α : ℝ => (1 - α) / (2 * α)) (Set.Ioo 0 1) := by
+          exact continuousOn_of_forall_continuousAt fun x hx => ContinuousAt.div ( continuousAt_const.sub continuousAt_id ) ( continuousAt_const.mul continuousAt_id ) ( by linarith [ hx.1 ] )
+        have h_rpow_cont : ContinuousOn (fun α : ℝ => (σ.M ^ α)) (Set.Ioi 0) := by
+          apply_rules [ HermitianMat.continuousOn_rpow_pos ]
+        exact h_rpow_cont.comp h_exp_cont fun x hx => by rw [ Set.mem_Ioi ] ; apply div_pos <;> linarith [ hx.1, hx.2 ]
+      exact Continuous.comp_continuousOn ( by continuity ) h_cont
+    fun_prop
+  apply HermitianMat.continuousOn_rpow_joint_nonneg_pos
+  · exact h_cont
+  · exact continuousOn_id
+  · exact fun x hx => hx.1
+
 /-- Continuity on (0,1): the sandwich relative Rényi entropy is continuous in α on (0,1). -/
 private theorem sandwichedRelRentropy.continuousOn_Ioo_0_1 (ρ σ : MState d) :
     ContinuousOn (fun α => D̃_ α(ρ‖σ)) (Set.Ioo 0 1) := by
-  sorry
+  dsimp [SandwichedRelRentropy]
+  split_ifs with hρ
+  · simp [← ENNReal.ofReal_eq_coe_nnreal]
+    rw [continuousOn_congr (f := fun α ↦ ENNReal.ofReal
+      (Real.log ((HermitianMat.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ρ.M ^ α).trace / (α - 1)))]
+    · apply (ENNReal.continuous_ofReal).comp_continuousOn
+      apply ContinuousOn.div₀
+      · apply ContinuousOn.log
+        · exact HermitianMat.trace_Continuous.comp_continuousOn
+            (continuousOn_Ioo_0_1_aux ρ σ)
+        · intro x hx
+          exact (sandwiched_trace_pos hρ).ne'
+      · fun_prop
+      · intro x hx; exact sub_ne_zero.mpr (ne_of_lt hx.2)
+    · intro α hα
+      dsimp only
+      rw [if_pos hα.1, if_neg (ne_of_lt hα.2)]
+  · rw [continuousOn_congr (f := fun α ↦ ⊤)]
+    · fun_prop
+    · intro x hx
+      dsimp only
+      simp [hx.1]
 
 private lemma sandwichedRelRentropy.trace_at_one (ρ σ : MState d) :
     ((ρ.M.conj (σ.M ^ ((1 - (1:ℝ)) / (2 * (1:ℝ)))).mat) ^ (1:ℝ)).trace = 1 := by
@@ -977,14 +1015,164 @@ private lemma hasDerivAt_trace_rpow_at_one (B : HermitianMat d ℂ) (hB : 0 ≤ 
   ext α
   simp [HermitianMat.trace_rpow_eq_sum]
 
-/-- The derivative of α ↦ Tr[ρ σ^((1-α)/α)] at α = 1 is -⟪ρ, log σ⟫.
+/-
+PROBLEM
+Trace cyclicity for conj: Tr[conj(σ^t, ρ)] = ⟪ρ, σ^{2t}⟫ = Tr[ρ σ^{2t}].
+    Since σ^t is Hermitian: Tr[σ^t ρ σ^t] = Tr[ρ (σ^t)²] = Tr[ρ σ^{2t}].
+PROVIDED SOLUTION
+By definition, (ρ.M.conj (σ.M ^ t).mat).mat = (σ.M ^ t).mat * ρ.M.mat * ((σ.M ^ t).mat)^* (from conj_apply_mat). Since σ.M ^ t is Hermitian, ((σ.M ^ t).mat)^* = (σ.M ^ t).mat (from σ.M ^ t property .H). So the trace is Tr[(σ^t).mat * ρ.mat * (σ^t).mat].
+By Matrix.trace_mul_comm applied to the product ((σ^t).mat * ρ.mat) and (σ^t).mat:
+Tr[(σ^t).mat * ρ.mat * (σ^t).mat] = Tr[(σ^t).mat * (σ^t).mat * ρ.mat].
+Now use mat_rpow_add with σ.nonneg and t + t = 2t (≠ 0 since t ≠ 0): (σ.M ^ (t+t)).mat = (σ.M ^ t).mat * (σ.M ^ t).mat. So the trace becomes Tr[(σ.M ^ (2*t)).mat * ρ.mat].
+By inner_eq_trace_rc: ⟪ρ.M, σ.M ^ (2*t)⟫ = (ρ.M.mat * (σ.M ^ (2*t)).mat).trace.
+By Matrix.trace_mul_comm: Tr[ρ.mat * (σ^{2t}).mat] = Tr[(σ^{2t}).mat * ρ.mat].
+Combine: the conj trace = Tr[(σ^{2t}).mat * ρ.mat] = Tr[ρ.mat * (σ^{2t}).mat] = ⟪ρ, σ^{2t}⟫.
+Note: show t + t = 2 * t by ring, and 2 * t ≠ 0 from ht using two_mul_ne_zero or similar.
+-/
+private lemma trace_conj_eq_inner_rpow {ρ σ : MState d} {t : ℝ} (ht : t ≠ 0) :
+    (ρ.M.conj (σ.M ^ t).mat).trace = ⟪ρ.M, σ.M ^ (2 * t)⟫ := by
+  have h_cyclic : ((σ.M ^ t).mat * ρ.M.mat * (σ.M ^ t).mat).trace = ((σ.M ^ (2 * t)).mat * ρ.M.mat).trace := by
+    -- Since σ.M ^ t is Hermitian, we can use the property that the trace of a product is invariant under cyclic permutations.
+    have h_cyclic : Matrix.trace ((σ.M ^ t).mat * ρ.M.mat * (σ.M ^ t).mat) = Matrix.trace ((σ.M ^ t).mat * (σ.M ^ t).mat * ρ.M.mat) := by
+      rw [ ← Matrix.trace_mul_comm ] ; simp +decide [ Matrix.mul_assoc ] ;
+    generalize_proofs at *; (
+    rw [ h_cyclic, two_mul ] ; ring; (
+    have h_exp : (σ.M ^ (t + t)).mat = (σ.M ^ t).mat * (σ.M ^ t).mat := by
+      have h_nonneg : 0 ≤ σ.M := by
+        exact σ.nonneg
+      have h_ne_zero : t + t ≠ 0 := by
+        exact fun h => ht ( by linarith )
+      exact (by
+      exact?)
+    generalize_proofs at *; (
+    rw [ mul_two, h_exp ])));
+  have h_inner : ⟪ρ.M, σ.M ^ (2 * t)⟫ = ((ρ.M.mat * (σ.M ^ (2 * t)).mat).trace).re := by
+    exact?
+  simp_all +decide [ Matrix.trace_mul_comm ( ρ.M.val ) ( ( σ.M ^ ( 2 * t ) ).val ) ] ;
+  convert congr_arg Complex.re h_cyclic using 1 ; simp +decide [ HermitianMat.conj ] ; ring!;
+  rw [ Matrix.trace_mul_comm ]
+
+-- The weight of eigenvalue i in the inner product decomposition
+private def eigenWeight' (ρ σ : MState d) (i : d) : ℝ :=
+  RCLike.re ((Matrix.vecMul (star (σ.M.H.eigenvectorBasis i : d → ℂ)) ρ.M.mat) ⬝ᵥ (σ.M.H.eigenvectorBasis i : d → ℂ))
+
+private lemma inner_cfc_eq_sum_eigenWeight' (ρ σ : MState d) (f : ℝ → ℝ) :
+    ⟪ρ.M, σ.M.cfc f⟫ = ∑ i, f (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i := by
+  have h_inner : ⟪ρ.M, σ.M.cfc f⟫ = RCLike.re (Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat)) := by
+    exact rfl;
+  have h_trace : Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat) = ∑ i, f (σ.M.H.eigenvalues i) * (star (σ.M.H.eigenvectorBasis i) ⬝ᵥ ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i)) := by
+    rw [ Matrix.trace ];
+    have h_cfc_def : (σ.M.cfc f).mat = ∑ i, (f (Matrix.IsHermitian.eigenvalues σ.M.H i)) • Matrix.of (fun x y => (σ.M.H.eigenvectorBasis i x) * (star (σ.M.H.eigenvectorBasis i y))) := by
+      convert σ.M.cfc_toMat_eq_sum_smul_proj f using 1;
+      ext i j; simp [ Matrix.single ] ; ring_nf
+      simp [ Matrix.sum_apply, Matrix.mul_apply, Matrix.conjTranspose_apply, Matrix.of_apply ];
+      refine' Finset.sum_congr rfl fun x _ => _ ; simp [ Finset.sum_ite, Finset.filter_eq, Finset.filter_and ] ; ring_nf
+      rw [ Finset.sum_eq_single x ] <;> aesop;
+    simp [ h_cfc_def, Matrix.mulVec, dotProduct, Finset.mul_sum, mul_left_comm ];
+    simp [ Matrix.sum_apply, Matrix.mul_apply ];
+    rw [ Finset.sum_comm ] ; congr ; ext ; congr ; ext ; congr ; ext ; ring!;
+  simp_all [ eigenWeight' ];
+  simp [ Matrix.dotProduct_mulVec ]
+
+private lemma eigenWeight'_nonneg (ρ σ : MState d) (i : d) :
+    0 ≤ eigenWeight' ρ σ i := by
+  set v := σ.M.H.eigenvectorBasis i
+  set w := ρ.M.mat.mulVec v
+  have h_eigenWeight : eigenWeight' ρ σ i = RCLike.re (star v ⬝ᵥ w) := by
+    unfold eigenWeight';
+    simp +zetaDelta at *;
+    simp [ Matrix.dotProduct_mulVec ]
+  rw [h_eigenWeight];
+  have := ρ.pos
+  obtain ⟨ h₁, h₂ ⟩ := this;
+  have := h₁.2 v;
+  exact this.1.trans (by simp [w])
+
+private lemma eigenWeight'_zero_of_eigenvalue_zero (ρ σ : MState d) (i : d)
+    (hσ : σ.M.ker ≤ ρ.M.ker) (hei : σ.M.H.eigenvalues i = 0) :
+    eigenWeight' ρ σ i = 0 := by
+  unfold eigenWeight';
+  have h_mulVec_zero : σ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
+    convert Matrix.IsHermitian.mulVec_eigenvectorBasis σ.M.H i using 1 ; aesop;
+  have h_mulVec_zero' : ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
+    exact hσ h_mulVec_zero;
+  convert congr_arg ( fun x : d → ℂ => RCLike.re ( star ( σ.M.H.eigenvectorBasis i ) ⬝ᵥ x ) ) h_mulVec_zero' using 1;
+  · simp [ Matrix.dotProduct_mulVec ];
+  · simp [ dotProduct ]
+
+/-
+PROBLEM
+The derivative of u ↦ ⟪ρ, σ^u⟫ at u = 0 is ⟪ρ, σ.log⟫.
+    Use inner_cfc_eq_sum_eigenWeight' to write ⟪ρ, σ^u⟫ = ∑ i, q_i^u * eigenWeight' ρ σ i,
+    differentiate term by term using HasDerivAt.sum.
+PROVIDED SOLUTION
+Use inner_cfc_eq_sum_eigenWeight' (defined just above) to express:
+⟪ρ.M, σ.M ^ u⟫ = ∑ i, (σ.M.H.eigenvalues i) ^ u * eigenWeight' ρ σ i  (since σ.M ^ u = σ.M.cfc (· ^ u))
+⟪ρ.M, σ.M.log⟫ = ∑ i, Real.log (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i  (since σ.M.log = σ.M.cfc Real.log)
+Then show HasDerivAt for each summand at u = 0. Let q := σ.M.H.eigenvalues i, w := eigenWeight' ρ σ i.
+Case q > 0: HasDerivAt (fun u => q ^ u * w) (Real.log q * w) 0.
+  Proof: q ^ u = exp(u * log q), so d/du q^u = q^u * log q. At u = 0: q^0 = 1, derivative = log q.
+  Use HasDerivAt.const_mul w (or HasDerivAt.mul_const) with HasDerivAt for rpow.
+  Specifically, use (hasDerivAt_id 0).const_rpow (Or.inl (ne_of_gt hq)) or similar, giving HasDerivAt (q ^ ·) (q^0 * log q) 0, then multiply by w.
+Case q = 0: w = 0 by eigenWeight'_zero_of_eigenvalue_zero ρ σ i h hei.
+  The function is constantly 0 (since 0^u * 0 = 0 for all u). HasDerivAt with derivative 0.
+  And Real.log 0 * 0 = 0 matches.
+Apply HasDerivAt.sum to combine. Convert the function and derivative using the sum representations from inner_cfc_eq_sum_eigenWeight'.
+-/
+private lemma hasDerivAt_inner_rpow_at_zero {ρ σ : MState d}
+    (h : σ.M.ker ≤ ρ.M.ker) :
+    HasDerivAt (fun u : ℝ => ⟪ρ.M, σ.M ^ u⟫) ⟪ρ.M, σ.M.log⟫ 0 := by
+  convert HasDerivAt.congr_of_eventuallyEq ?_ ?_;
+  exact fun u => ∑ i, ( σ.M.H.eigenvalues i ) ^ u * eigenWeight' ρ σ i;
+  · have h_deriv : ∀ i, HasDerivAt (fun u : ℝ => (σ.M.H.eigenvalues i) ^ u * eigenWeight' ρ σ i) (Real.log (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i) 0 := by
+      intro i
+      by_cases h_pos : 0 < σ.M.H.eigenvalues i <;> by_cases h_zero : σ.M.H.eigenvalues i = 0 <;> simp_all +decide [ Real.rpow_def_of_pos, Real.rpow_def_of_nonpos, mul_comm ];
+      · convert HasDerivAt.const_mul ( eigenWeight' ρ σ i ) ( HasDerivAt.exp ( HasDerivAt.mul ( hasDerivAt_id 0 ) ( hasDerivAt_const _ _ ) ) ) using 1 ; norm_num;
+      · convert hasDerivAt_const _ _ using 1;
+        swap;
+        exact 0;
+        ext u; by_cases hu : u = 0 <;> simp +decide [ hu, eigenWeight'_zero_of_eigenvalue_zero ρ σ i h h_zero ] ;
+      · convert HasDerivAt.const_mul ( eigenWeight' ρ σ i ) ( HasDerivAt.mul ( HasDerivAt.cos ( hasDerivAt_mul_const _ ) ) ( HasDerivAt.exp ( hasDerivAt_mul_const _ ) ) ) using 1 ; norm_num [ h_zero ];
+    convert HasDerivAt.sum fun i _ => h_deriv i using 1 ; aesop;
+    convert inner_cfc_eq_sum_eigenWeight' ρ σ Real.log using 1;
+  · filter_upwards [ Metric.ball_mem_nhds 0 zero_lt_one ] with u hu;
+    convert inner_cfc_eq_sum_eigenWeight' ρ σ ( fun x => x ^ u ) using 1
+
+/-  The derivative of α ↦ Tr[ρ σ^((1-α)/α)] at α = 1 is -⟪ρ, log σ⟫.
     Uses trace cyclic: Tr[σ^t ρ σ^t] = Tr[ρ σ^(2t)].
     With 2t(α) = (1-α)/α, d/dα (2t) = -1/α², and d/dε σ^ε|_{ε=0} = log σ. -/
-private lemma hasDerivAt_trace_conj_at_one (ρ σ : MState d)
+private lemma hasDerivAt_trace_conj_at_one {ρ σ : MState d}
     (h : σ.M.ker ≤ ρ.M.ker) :
     HasDerivAt
       (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat)).trace)
       (-⟪ρ.M, σ.M.log⟫)
+      1 := by
+  -- Apply the HasDerivAt.comp theorem to combine the derivatives.
+  have h_chain : HasDerivAt (fun α : ℝ => ⟪ρ.M, σ.M ^ ((1 - α) / α)⟫) (⟪ρ.M, σ.M.log⟫ * (-1)) 1 := by
+    have h_chain : HasDerivAt (fun u : ℝ => ⟪ρ.M, σ.M ^ u⟫) ⟪ρ.M, σ.M.log⟫ 0 := by
+      convert hasDerivAt_inner_rpow_at_zero h using 1;
+    convert HasDerivAt.comp _ _ _ using 1;
+    rotate_left;
+    exact fun α => ( 1 - α ) / α;
+    exacts [ fun u => ⟪ρ.M, σ.M ^ u⟫, by simpa using h_chain, by simpa using HasDerivAt.div ( hasDerivAt_id ( 1 : ℝ ) |> HasDerivAt.const_sub 1 ) ( hasDerivAt_id ( 1 : ℝ ) ) ( by norm_num ), funext fun _ => rfl ];
+  convert h_chain.congr_of_eventuallyEq _ using 1;
+  · ring!;
+  · filter_upwards [ lt_mem_nhds zero_lt_one ] with α hα;
+    by_cases h : ( 1 - α ) / ( 2 * α ) = 0 <;> simp +decide [ *, trace_conj_eq_inner_rpow ];
+    · simp_all +decide [ div_eq_iff, ne_of_gt ];
+    · rw [ mul_div, mul_comm ] ; ring
+
+/-- The cross term in the derivative decomposition vanishes: the function
+    α ↦ Tr[B(α)^α] - Tr[B(α)] - Tr[ρ^α] + 1 has derivative 0 at α = 1.
+    This is because at α=1, B^1 = B, so ∂/∂B Tr[B^α] = Tr[·] (the trace is linear),
+    making the cross term (variation in B times variation in α) vanish. -/
+private lemma rpow_trace_cross_term_vanishes {ρ σ : MState d}
+    (h : σ.M.ker ≤ ρ.M.ker) :
+    HasDerivAt
+      (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ^ α).trace
+        - (ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat).trace
+        - (ρ.M ^ α).trace + 1)
+      0
       1 := by
   sorry
 
@@ -994,7 +1182,28 @@ private theorem sandwichedRelRentropy.hasDerivAt_trace_at_one {ρ σ : MState d}
       (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ^ α).trace)
       ⟪ρ.M, ρ.M.log - σ.M.log⟫
       1 := by
-  sorry
+  have h_cross_term : HasDerivAt
+      (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ^ α).trace
+        - (ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat).trace
+        - (ρ.M ^ α).trace + 1)
+      0
+      1 := by
+        convert rpow_trace_cross_term_vanishes h using 1;
+  have h_conj : HasDerivAt
+      (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat).trace))
+      (-⟪ρ.M, σ.M.log⟫)
+      1 := by
+        convert hasDerivAt_trace_conj_at_one h using 1
+  generalize_proofs at *; (
+  have h_rpow : HasDerivAt
+      (fun α : ℝ => (ρ.M ^ α).trace)
+      (⟪ρ.M, ρ.M.log⟫)
+      1 := by
+        convert hasDerivAt_trace_rpow_at_one ρ.M ρ.nonneg using 1
+  generalize_proofs at *; (
+  convert h_cross_term.add ( h_conj.add h_rpow ) |> HasDerivAt.sub <| hasDerivAt_const _ 1 using 1 <;> norm_num [ inner_sub_right ] ; ring!;
+  · ext; norm_num; ring;
+  · ring!))
 
 /--
 The key limit: as α → 1, log(Tr[(ρ.conj σ^t)^α]) / (α-1) → ⟪ρ, log ρ - log σ⟫,
