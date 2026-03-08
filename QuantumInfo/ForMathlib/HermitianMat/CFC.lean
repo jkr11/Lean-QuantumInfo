@@ -873,6 +873,23 @@ theorem inv_ge_one_of_le_one (hA : A.mat.PosDef) (h : A ≤ 1) : 1 ≤ A⁻¹ :=
     rw [ ← sub_sub, ← cfc_sub ];
     simp [ Pi.sub_def ]
 
+/-- The trace of cfc(f, A) equals the sum of f applied to eigenvalues. -/
+lemma trace_cfc_eq (A : HermitianMat d ℂ) (f : ℝ → ℝ) :
+    (A.cfc f).trace = ∑ i, f (A.H.eigenvalues i) := by
+  have h1 := HermitianMat.trace_eq_trace (A.cfc f)
+  obtain ⟨e, he⟩ := HermitianMat.cfc_eigenvalues f A
+  have h2 := (A.cfc f).H.trace_eq_sum_eigenvalues
+  rw [he] at h2
+  simp [Function.comp] at h2
+  rw [HermitianMat.mat_cfc] at h1
+  rw [h2] at h1
+  have h3 : (Complex.ofReal) (A.cfc f).trace = Complex.ofReal (∑ i, f (A.H.eigenvalues (e i))) := by
+    convert h1 using 1
+    simp
+  have h4 := Complex.ofReal_injective h3
+  rw [h4]
+  exact Equiv.sum_comp e (fun x => f (A.H.eigenvalues x))
+
 end uncategorized_cleanup
 
 lemma mulVec_eq_zero_iff_inner_eigenvector_zero

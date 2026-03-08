@@ -233,6 +233,33 @@ theorem ker_rpow_le_of_nonneg {A : HermitianMat d ℂ} (hA : 0 ≤ A) :
   apply ker_cfc_le_ker_nonneg hA
   grind [Real.rpow_eq_zero_iff_of_nonneg, Real.rpow_eq_pow]
 
+/-
+For a positive Hermitian matrix A, (A^2)^(p/2) = A^p, expressed using functional calculus.
+TODO: Cleanup, generalize...
+-/
+theorem cfc_sq_rpow_eq_cfc_rpow
+    (A : HermitianMat d ℂ) (hA : 0 ≤ A) (p : ℝ) (hp : 0 < p) :
+    (A ^ 2).cfc (fun x => x ^ (p/2)) = A.cfc (fun x => x ^ p) := by
+  have h_sqrt : (A ^ 2).cfc (fun x => x ^ (p / 2)) = (A.cfc (fun x => x ^ 2)).cfc (fun x => x ^ (p / 2)) := by
+    convert rfl;
+    exact cfc_pow A;
+  rw [ h_sqrt ];
+  have h_sqrt : ∀ (f g : ℝ → ℝ), Continuous f → Continuous g → ∀ (A : HermitianMat d ℂ), (A.cfc f).cfc g = A.cfc (fun x => g (f x)) := by
+    exact fun f g a a A => Eq.symm (cfc_comp_apply A f g);
+  rw [ h_sqrt ];
+  · have h_sqrt : ∀ x : ℝ, 0 ≤ x → (x ^ 2) ^ (p / 2) = x ^ p := by
+      intro x hx
+      rw [ ← Real.rpow_natCast, ← Real.rpow_mul hx ]
+      ring_nf
+    exact cfc_congr_of_nonneg hA h_sqrt;
+  · continuity;
+  · exact continuous_id.rpow_const fun x => Or.inr <| by positivity
+
+/-- Tr[A^p] = ∑ᵢ λᵢ^p for a Hermitian matrix A. -/
+lemma trace_rpow_eq_sum (A : HermitianMat d ℂ) (p : ℝ) :
+    (A ^ p).trace = ∑ i, (A.H.eigenvalues i) ^ p := by
+  exact A.trace_cfc_eq (· ^ p)
+
 /-! ## Loewner-Heinz Theorem
 The operator monotonicity of `x ↦ x ^ q` for `0 < q ≤ 1`:
 if `A ≤ B` (in the Loewner order), then `A ^ q ≤ B ^ q`.
@@ -459,25 +486,14 @@ section ArakiLiebThirring
 
 variable {A B : HermitianMat d ℂ} {q r : ℝ}
 
-/-- An inequality of Lieb-Thirring type. For 0 < q ≤ 1:
-  `Tr[(B A B)^q] ≤ Tr[B^q A^q B^q]`.
+/-- An inequality of Lieb-Thirring type. For 0 < r ≤ 1:
+  `Tr[B^r A^r B^r] ≤ Tr[(B A B)^r]`.
 -/
 lemma lieb_thirring_le_one
     {A B : HermitianMat d ℂ} (hA : 0 ≤ A) (hB : 0 ≤ B)
-    {q : ℝ} (hq0 : 0 < q) (hq1 : q ≤ 1) :
-    ((A.conj B.mat) ^ q).trace ≤ ((A ^ q).conj (B ^ q).mat).trace := by
+    {r : ℝ} (hq0 : 0 < r) (hq1 : q ≤ r) :
+    ((A ^ r).conj (B ^ r).mat).trace ≤ ((A.conj B.mat) ^ r).trace := by
   sorry
-
-/-- An inequality of Araki-Lieb-Thirring type. For 0 < q ≤ 1:
-  `Tr[(B^r A B^r)^q] ≤ Tr[B^{rq} A^q B^{rq}]`.
-Note that this is actually just a special case of the above where `B := B ^ r`.
--/
-lemma araki_lieb_thirring_le_one
-    {A B : HermitianMat d ℂ} (hA : 0 ≤ A) (hB : 0 ≤ B)
-    (r : ℝ) {q : ℝ} (hq0 : 0 < q) (hq1 : q ≤ 1) :
-    ((A.conj (B ^ r).mat) ^ q).trace ≤ ((A ^ q).conj (B ^ (r * q)).mat).trace := by
-  rw [rpow_mul hB]
-  exact lieb_thirring_le_one hA (rpow_nonneg hB) hq0 hq1
 
 end ArakiLiebThirring
 
