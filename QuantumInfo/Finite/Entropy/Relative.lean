@@ -1006,14 +1006,14 @@ private lemma hasDerivAt_trace_rpow_at_one (B : HermitianMat d ℂ) (hB : 0 ≤ 
   have h_deriv : ∀ i, HasDerivAt (fun α : ℝ => (B.H.eigenvalues i) ^ α) (B.H.eigenvalues i * Real.log (B.H.eigenvalues i)) 1 := by
     intro i
     by_cases h_pos : 0 < B.H.eigenvalues i;
-    · convert HasDerivAt.rpow ( hasDerivAt_const _ _ ) ( hasDerivAt_id 1 ) _ using 1 <;> aesop;
+    · convert HasDerivAt.rpow ( hasDerivAt_const _ _ ) ( hasDerivAt_id 1 ) h_pos using 1
+      simp only [id_eq, mul_one, sub_self, Real.rpow_zero, Real.rpow_one, one_mul, zero_add]
     · have h_zero : B.H.eigenvalues i = 0 := by
         exact le_antisymm ( le_of_not_gt h_pos ) ( by simpa using hB.eigenvalues_nonneg i )
       simp [h_zero]
       exact (hasDerivAt_const _ _).congr_of_eventuallyEq (Filter.eventuallyEq_of_mem ( Ioi_mem_nhds zero_lt_one ) fun x hx => Real.zero_rpow hx.out.ne' )
-  convert HasDerivAt.sum fun i _ => h_deriv i using 1;
-  ext α
-  simp [HermitianMat.trace_rpow_eq_sum]
+  simp only [HermitianMat.trace_rpow_eq_sum, ← Finset.sum_apply]
+  convert HasDerivAt.sum fun i _ => h_deriv i using 1
 
 /-
 PROBLEM
@@ -1034,30 +1034,30 @@ private lemma trace_conj_eq_inner_rpow {ρ σ : MState d} {t : ℝ} (ht : t ≠ 
   have h_cyclic : ((σ.M ^ t).mat * ρ.M.mat * (σ.M ^ t).mat).trace = ((σ.M ^ (2 * t)).mat * ρ.M.mat).trace := by
     -- Since σ.M ^ t is Hermitian, we can use the property that the trace of a product is invariant under cyclic permutations.
     have h_cyclic : Matrix.trace ((σ.M ^ t).mat * ρ.M.mat * (σ.M ^ t).mat) = Matrix.trace ((σ.M ^ t).mat * (σ.M ^ t).mat * ρ.M.mat) := by
-      rw [ ← Matrix.trace_mul_comm ] ; simp +decide [ Matrix.mul_assoc ] ;
-    generalize_proofs at *; (
-    rw [ h_cyclic, two_mul ] ; ring; (
+      rw [ ← Matrix.trace_mul_comm ]
+      simp [ Matrix.mul_assoc ]
+    rw [ h_cyclic, two_mul ]
+    ring_nf
     have h_exp : (σ.M ^ (t + t)).mat = (σ.M ^ t).mat * (σ.M ^ t).mat := by
       have h_nonneg : 0 ≤ σ.M := by
         exact σ.nonneg
       have h_ne_zero : t + t ≠ 0 := by
         exact fun h => ht ( by linarith )
-      exact (by
-      exact?)
-    generalize_proofs at *; (
-    rw [ mul_two, h_exp ])));
+      exact HermitianMat.mat_rpow_add h_nonneg h_ne_zero
+    rw [ mul_two, h_exp ]
   have h_inner : ⟪ρ.M, σ.M ^ (2 * t)⟫ = ((ρ.M.mat * (σ.M ^ (2 * t)).mat).trace).re := by
-    exact?
-  simp_all +decide [ Matrix.trace_mul_comm ( ρ.M.val ) ( ( σ.M ^ ( 2 * t ) ).val ) ] ;
-  convert congr_arg Complex.re h_cyclic using 1 ; simp +decide [ HermitianMat.conj ] ; ring!;
+    exact rfl
+  simp_all
+  convert congr_arg Complex.re h_cyclic using 1 ; simp [ HermitianMat.conj ] ; ring!;
   rw [ Matrix.trace_mul_comm ]
 
 -- The weight of eigenvalue i in the inner product decomposition
-private def eigenWeight' (ρ σ : MState d) (i : d) : ℝ :=
+private def eigenWeight (ρ σ : MState d) (i : d) : ℝ :=
   RCLike.re ((Matrix.vecMul (star (σ.M.H.eigenvectorBasis i : d → ℂ)) ρ.M.mat) ⬝ᵥ (σ.M.H.eigenvectorBasis i : d → ℂ))
 
-private lemma inner_cfc_eq_sum_eigenWeight' (ρ σ : MState d) (f : ℝ → ℝ) :
-    ⟪ρ.M, σ.M.cfc f⟫ = ∑ i, f (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i := by
+private lemma inner_cfc_eq_sum_eigenWeight (ρ σ : MState d) (f : ℝ → ℝ) :
+    ⟪ρ.M, σ.M.cfc f⟫ = ∑ i, f (σ.M.H.eigenvalues i) * eigenWeight ρ σ i := by
+  -- By definition of the inner product in the context of Hermitian matrices, we can expand it using the trace.
   have h_inner : ⟪ρ.M, σ.M.cfc f⟫ = RCLike.re (Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat)) := by
     exact rfl;
   have h_trace : Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat) = ∑ i, f (σ.M.H.eigenvalues i) * (star (σ.M.H.eigenvectorBasis i) ⬝ᵥ ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i)) := by
@@ -1071,72 +1071,64 @@ private lemma inner_cfc_eq_sum_eigenWeight' (ρ σ : MState d) (f : ℝ → ℝ)
     simp [ h_cfc_def, Matrix.mulVec, dotProduct, Finset.mul_sum, mul_left_comm ];
     simp [ Matrix.sum_apply, Matrix.mul_apply ];
     rw [ Finset.sum_comm ] ; congr ; ext ; congr ; ext ; congr ; ext ; ring!;
-  simp_all [ eigenWeight' ];
+  simp_all [ eigenWeight ];
   simp [ Matrix.dotProduct_mulVec ]
 
-private lemma eigenWeight'_nonneg (ρ σ : MState d) (i : d) :
-    0 ≤ eigenWeight' ρ σ i := by
+private lemma eigenWeight_nonneg (ρ σ : MState d) (i : d) : 0 ≤ eigenWeight ρ σ i := by
+  -- By definition of `eigenWeight`, we have:
   set v := σ.M.H.eigenvectorBasis i
   set w := ρ.M.mat.mulVec v
-  have h_eigenWeight : eigenWeight' ρ σ i = RCLike.re (star v ⬝ᵥ w) := by
-    unfold eigenWeight';
+  have h_eigenWeight : eigenWeight ρ σ i = RCLike.re (star v ⬝ᵥ w) := by
+    unfold eigenWeight;
     simp +zetaDelta at *;
     simp [ Matrix.dotProduct_mulVec ]
   rw [h_eigenWeight];
+  -- Since ρ is positive semi-definite, we have that the inner product of any vector with ρ is non-negative. Hence, we can write:
   have := ρ.pos
   obtain ⟨ h₁, h₂ ⟩ := this;
   have := h₁.2 v;
   exact this.1.trans (by simp [w])
 
-private lemma eigenWeight'_zero_of_eigenvalue_zero (ρ σ : MState d) (i : d)
-    (hσ : σ.M.ker ≤ ρ.M.ker) (hei : σ.M.H.eigenvalues i = 0) :
-    eigenWeight' ρ σ i = 0 := by
-  unfold eigenWeight';
+private lemma eigenWeight_zero_of_eigenvalue_zero {i : d} (hσ : σ.M.ker ≤ ρ.M.ker)
+  (hei : σ.M.H.eigenvalues i = 0) :
+    eigenWeight ρ σ i = 0 := by
+  unfold eigenWeight
   have h_mulVec_zero : σ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
-    convert Matrix.IsHermitian.mulVec_eigenvectorBasis σ.M.H i using 1 ; aesop;
+    convert Matrix.IsHermitian.mulVec_eigenvectorBasis σ.M.H i using 1
+    simp [hei]
   have h_mulVec_zero' : ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
-    exact hσ h_mulVec_zero;
+    exact hσ h_mulVec_zero
   convert congr_arg ( fun x : d → ℂ => RCLike.re ( star ( σ.M.H.eigenvectorBasis i ) ⬝ᵥ x ) ) h_mulVec_zero' using 1;
-  · simp [ Matrix.dotProduct_mulVec ];
-  · simp [ dotProduct ]
+  · simp [Matrix.dotProduct_mulVec]
+  · simp [dotProduct]
 
 /-
-PROBLEM
 The derivative of u ↦ ⟪ρ, σ^u⟫ at u = 0 is ⟪ρ, σ.log⟫.
-    Use inner_cfc_eq_sum_eigenWeight' to write ⟪ρ, σ^u⟫ = ∑ i, q_i^u * eigenWeight' ρ σ i,
+    Use inner_cfc_eq_sum_eigenWeight to write ⟪ρ, σ^u⟫ = ∑ i, q_i^u * eigenWeight ρ σ i,
     differentiate term by term using HasDerivAt.sum.
-PROVIDED SOLUTION
-Use inner_cfc_eq_sum_eigenWeight' (defined just above) to express:
-⟪ρ.M, σ.M ^ u⟫ = ∑ i, (σ.M.H.eigenvalues i) ^ u * eigenWeight' ρ σ i  (since σ.M ^ u = σ.M.cfc (· ^ u))
-⟪ρ.M, σ.M.log⟫ = ∑ i, Real.log (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i  (since σ.M.log = σ.M.cfc Real.log)
-Then show HasDerivAt for each summand at u = 0. Let q := σ.M.H.eigenvalues i, w := eigenWeight' ρ σ i.
-Case q > 0: HasDerivAt (fun u => q ^ u * w) (Real.log q * w) 0.
-  Proof: q ^ u = exp(u * log q), so d/du q^u = q^u * log q. At u = 0: q^0 = 1, derivative = log q.
-  Use HasDerivAt.const_mul w (or HasDerivAt.mul_const) with HasDerivAt for rpow.
-  Specifically, use (hasDerivAt_id 0).const_rpow (Or.inl (ne_of_gt hq)) or similar, giving HasDerivAt (q ^ ·) (q^0 * log q) 0, then multiply by w.
-Case q = 0: w = 0 by eigenWeight'_zero_of_eigenvalue_zero ρ σ i h hei.
-  The function is constantly 0 (since 0^u * 0 = 0 for all u). HasDerivAt with derivative 0.
-  And Real.log 0 * 0 = 0 matches.
-Apply HasDerivAt.sum to combine. Convert the function and derivative using the sum representations from inner_cfc_eq_sum_eigenWeight'.
 -/
-private lemma hasDerivAt_inner_rpow_at_zero {ρ σ : MState d}
-    (h : σ.M.ker ≤ ρ.M.ker) :
+private lemma hasDerivAt_inner_rpow_at_zero (h : σ.M.ker ≤ ρ.M.ker) :
     HasDerivAt (fun u : ℝ => ⟪ρ.M, σ.M ^ u⟫) ⟪ρ.M, σ.M.log⟫ 0 := by
   convert HasDerivAt.congr_of_eventuallyEq ?_ ?_;
-  exact fun u => ∑ i, ( σ.M.H.eigenvalues i ) ^ u * eigenWeight' ρ σ i;
-  · have h_deriv : ∀ i, HasDerivAt (fun u : ℝ => (σ.M.H.eigenvalues i) ^ u * eigenWeight' ρ σ i) (Real.log (σ.M.H.eigenvalues i) * eigenWeight' ρ σ i) 0 := by
+  exact fun u => ∑ i, ( σ.M.H.eigenvalues i ) ^ u * eigenWeight ρ σ i;
+  · have h_deriv : ∀ i, HasDerivAt (fun u : ℝ => (σ.M.H.eigenvalues i) ^ u * eigenWeight ρ σ i) (Real.log (σ.M.H.eigenvalues i) * eigenWeight ρ σ i) 0 := by
       intro i
-      by_cases h_pos : 0 < σ.M.H.eigenvalues i <;> by_cases h_zero : σ.M.H.eigenvalues i = 0 <;> simp_all +decide [ Real.rpow_def_of_pos, Real.rpow_def_of_nonpos, mul_comm ];
-      · convert HasDerivAt.const_mul ( eigenWeight' ρ σ i ) ( HasDerivAt.exp ( HasDerivAt.mul ( hasDerivAt_id 0 ) ( hasDerivAt_const _ _ ) ) ) using 1 ; norm_num;
-      · convert hasDerivAt_const _ _ using 1;
-        swap;
-        exact 0;
-        ext u; by_cases hu : u = 0 <;> simp +decide [ hu, eigenWeight'_zero_of_eigenvalue_zero ρ σ i h h_zero ] ;
-      · convert HasDerivAt.const_mul ( eigenWeight' ρ σ i ) ( HasDerivAt.mul ( HasDerivAt.cos ( hasDerivAt_mul_const _ ) ) ( HasDerivAt.exp ( hasDerivAt_mul_const _ ) ) ) using 1 ; norm_num [ h_zero ];
-    convert HasDerivAt.sum fun i _ => h_deriv i using 1 ; aesop;
-    convert inner_cfc_eq_sum_eigenWeight' ρ σ Real.log using 1;
-  · filter_upwards [ Metric.ball_mem_nhds 0 zero_lt_one ] with u hu;
-    convert inner_cfc_eq_sum_eigenWeight' ρ σ ( fun x => x ^ u ) using 1
+      rcases (σ.eigenvalue_nonneg i).lt_or_eq' with h_pos | h_zero
+      · simp only [h_pos, Real.rpow_def_of_pos, mul_comm]
+        convert ((hasDerivAt_id 0).mul (hasDerivAt_const _ _)).exp.const_mul (eigenWeight ρ σ i ) using 1
+        simp
+      · simp [Real.rpow_def_of_nonpos, mul_comm, h_zero]
+        convert hasDerivAt_const (0 : ℝ) (0 : ℝ) using 1
+        ext1 u
+        split_ifs with hu
+        · simp [eigenWeight_zero_of_eigenvalue_zero h h_zero]
+        · rfl
+    convert HasDerivAt.sum (u := Finset.univ) fun i _ => h_deriv i using 1
+    · ext x : 1
+      simp only [Finset.sum_apply]
+    · exact inner_cfc_eq_sum_eigenWeight ρ σ Real.log
+  · filter_upwards [Metric.ball_mem_nhds 0 zero_lt_one] with u hu
+    exact inner_cfc_eq_sum_eigenWeight ρ σ (· ^ u)
 
 /-  The derivative of α ↦ Tr[ρ σ^((1-α)/α)] at α = 1 is -⟪ρ, log σ⟫.
     Uses trace cyclic: Tr[σ^t ρ σ^t] = Tr[ρ σ^(2t)].
@@ -1147,20 +1139,19 @@ private lemma hasDerivAt_trace_conj_at_one {ρ σ : MState d}
       (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat)).trace)
       (-⟪ρ.M, σ.M.log⟫)
       1 := by
-  -- Apply the HasDerivAt.comp theorem to combine the derivatives.
   have h_chain : HasDerivAt (fun α : ℝ => ⟪ρ.M, σ.M ^ ((1 - α) / α)⟫) (⟪ρ.M, σ.M.log⟫ * (-1)) 1 := by
-    have h_chain : HasDerivAt (fun u : ℝ => ⟪ρ.M, σ.M ^ u⟫) ⟪ρ.M, σ.M.log⟫ 0 := by
-      convert hasDerivAt_inner_rpow_at_zero h using 1;
-    convert HasDerivAt.comp _ _ _ using 1;
-    rotate_left;
-    exact fun α => ( 1 - α ) / α;
-    exacts [ fun u => ⟪ρ.M, σ.M ^ u⟫, by simpa using h_chain, by simpa using HasDerivAt.div ( hasDerivAt_id ( 1 : ℝ ) |> HasDerivAt.const_sub 1 ) ( hasDerivAt_id ( 1 : ℝ ) ) ( by norm_num ), funext fun _ => rfl ];
-  convert h_chain.congr_of_eventuallyEq _ using 1;
-  · ring!;
-  · filter_upwards [ lt_mem_nhds zero_lt_one ] with α hα;
-    by_cases h : ( 1 - α ) / ( 2 * α ) = 0 <;> simp +decide [ *, trace_conj_eq_inner_rpow ];
-    · simp_all +decide [ div_eq_iff, ne_of_gt ];
-    · rw [ mul_div, mul_comm ] ; ring
+    apply HasDerivAt.comp (h₂ := fun u => ⟪ρ.M, σ.M ^ u⟫) (h := fun α => (1 - α) / α)
+    · simpa using hasDerivAt_inner_rpow_at_zero h
+    · simpa using HasDerivAt.div ( hasDerivAt_id ( 1 : ℝ ) |> HasDerivAt.const_sub 1 ) ( hasDerivAt_id ( 1 : ℝ ) ) ( by norm_num )
+  ring_nf at h_chain
+  apply h_chain.congr_of_eventuallyEq _
+  filter_upwards [ lt_mem_nhds zero_lt_one ] with α hα
+  by_cases h : ( 1 - α ) / ( 2 * α ) = 0
+  · simp [ne_of_gt, hα] at h
+    obtain ⟨⟩ : α = 1 := by linarith
+    simp [*]
+  · simp only [trace_conj_eq_inner_rpow h]
+    ring_nf
 
 /-- The cross term in the derivative decomposition vanishes: the function
     α ↦ Tr[B(α)^α] - Tr[B(α)] - Tr[ρ^α] + 1 has derivative 0 at α = 1.
@@ -1182,28 +1173,16 @@ private theorem sandwichedRelRentropy.hasDerivAt_trace_at_one {ρ σ : MState d}
       (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ^ α).trace)
       ⟪ρ.M, ρ.M.log - σ.M.log⟫
       1 := by
-  have h_cross_term : HasDerivAt
-      (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat) ^ α).trace
-        - (ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat).trace
-        - (ρ.M ^ α).trace + 1)
-      0
-      1 := by
-        convert rpow_trace_cross_term_vanishes h using 1;
-  have h_conj : HasDerivAt
-      (fun α : ℝ => ((ρ.M.conj (σ.M ^ ((1 - α) / (2 * α))).mat).trace))
-      (-⟪ρ.M, σ.M.log⟫)
-      1 := by
-        convert hasDerivAt_trace_conj_at_one h using 1
-  generalize_proofs at *; (
-  have h_rpow : HasDerivAt
-      (fun α : ℝ => (ρ.M ^ α).trace)
-      (⟪ρ.M, ρ.M.log⟫)
-      1 := by
-        convert hasDerivAt_trace_rpow_at_one ρ.M ρ.nonneg using 1
-  generalize_proofs at *; (
-  convert h_cross_term.add ( h_conj.add h_rpow ) |> HasDerivAt.sub <| hasDerivAt_const _ 1 using 1 <;> norm_num [ inner_sub_right ] ; ring!;
-  · ext; norm_num; ring;
-  · ring!))
+  have h_deriv :=
+    have h_cross_term := rpow_trace_cross_term_vanishes h
+    have h_conj := hasDerivAt_trace_conj_at_one h
+    have h_rpow := hasDerivAt_trace_rpow_at_one ρ.M ρ.nonneg
+    (h_cross_term.add (h_conj.add h_rpow)).sub (hasDerivAt_const 1 1)
+  convert h_deriv using 2
+  · simp only [Pi.sub_apply, Pi.add_apply]
+    ring
+  · simp only [inner_sub_right]
+    ring
 
 /--
 The key limit: as α → 1, log(Tr[(ρ.conj σ^t)^α]) / (α-1) → ⟪ρ, log ρ - log σ⟫,
@@ -1368,58 +1347,6 @@ private lemma approxLog_tendsto_at_pos {t : ℝ} (ht : 0 < t) :
   unfold approxLog
   rw [max_eq_left (by rw [← Real.log_le_log_iff (by positivity) (by positivity)]; linarith [Nat.le_ceil (-Real.log t), show (N : ℝ) ≥ ⌈-Real.log t⌉₊ + 1 by exact_mod_cast hN, Real.log_exp (-N)])]
 
--- The weight of eigenvalue i in the inner product decomposition
-private def eigenWeight (ρ σ : MState d) (i : d) : ℝ :=
-  RCLike.re ((Matrix.vecMul (star (σ.M.H.eigenvectorBasis i : d → ℂ)) ρ.M.mat) ⬝ᵥ (σ.M.H.eigenvectorBasis i : d → ℂ))
-
-private lemma inner_cfc_eq_sum_eigenWeight (ρ σ : MState d) (f : ℝ → ℝ) :
-    ⟪ρ.M, σ.M.cfc f⟫ = ∑ i, f (σ.M.H.eigenvalues i) * eigenWeight ρ σ i := by
-  -- By definition of the inner product in the context of Hermitian matrices, we can expand it using the trace.
-  have h_inner : ⟪ρ.M, σ.M.cfc f⟫ = RCLike.re (Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat)) := by
-    exact rfl;
-  have h_trace : Matrix.trace (ρ.M.mat * (σ.M.cfc f).mat) = ∑ i, f (σ.M.H.eigenvalues i) * (star (σ.M.H.eigenvectorBasis i) ⬝ᵥ ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i)) := by
-    rw [ Matrix.trace ];
-    have h_cfc_def : (σ.M.cfc f).mat = ∑ i, (f (Matrix.IsHermitian.eigenvalues σ.M.H i)) • Matrix.of (fun x y => (σ.M.H.eigenvectorBasis i x) * (star (σ.M.H.eigenvectorBasis i y))) := by
-      convert σ.M.cfc_toMat_eq_sum_smul_proj f using 1;
-      ext i j; simp [ Matrix.single ] ; ring_nf
-      simp [ Matrix.sum_apply, Matrix.mul_apply, Matrix.conjTranspose_apply, Matrix.of_apply ];
-      refine' Finset.sum_congr rfl fun x _ => _ ; simp [ Finset.sum_ite, Finset.filter_eq, Finset.filter_and ] ; ring_nf
-      rw [ Finset.sum_eq_single x ] <;> aesop;
-    simp [ h_cfc_def, Matrix.mulVec, dotProduct, Finset.mul_sum, mul_left_comm ];
-    simp [ Matrix.sum_apply, Matrix.mul_apply ];
-    rw [ Finset.sum_comm ] ; congr ; ext ; congr ; ext ; congr ; ext ; ring!;
-  simp_all [ eigenWeight ];
-  simp [ Matrix.dotProduct_mulVec ]
-
-private lemma eigenWeight_nonneg (ρ σ : MState d) (i : d) :
-    0 ≤ eigenWeight ρ σ i := by
-  -- By definition of `eigenWeight`, we have:
-  set v := σ.M.H.eigenvectorBasis i
-  set w := ρ.M.mat.mulVec v
-  have h_eigenWeight : eigenWeight ρ σ i = RCLike.re (star v ⬝ᵥ w) := by
-    unfold eigenWeight;
-    simp +zetaDelta at *;
-    simp [ Matrix.dotProduct_mulVec ]
-  rw [h_eigenWeight];
-  -- Since ρ is positive semi-definite, we have that the inner product of any vector with ρ is non-negative. Hence, we can write:
-  have := ρ.pos
-  obtain ⟨ h₁, h₂ ⟩ := this;
-  have := h₁.2 v;
-  exact this.1.trans (by simp [w])
-
-private lemma eigenWeight_zero_of_eigenvalue_zero (ρ σ : MState d) (i : d)
-    (hσ : σ.M.ker ≤ ρ.M.ker) (hei : σ.M.H.eigenvalues i = 0) :
-    eigenWeight ρ σ i = 0 := by
-  unfold eigenWeight;
-  -- Since $\lambda_i = 0$, we have $\sigma.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0$.
-  have h_mulVec_zero : σ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
-    convert Matrix.IsHermitian.mulVec_eigenvectorBasis σ.M.H i using 1 ; aesop;
-  have h_mulVec_zero' : ρ.M.mat.mulVec (σ.M.H.eigenvectorBasis i) = 0 := by
-    exact hσ h_mulVec_zero;
-  convert congr_arg ( fun x : d → ℂ => RCLike.re ( star ( σ.M.H.eigenvectorBasis i ) ⬝ᵥ x ) ) h_mulVec_zero' using 1;
-  · simp [ Matrix.dotProduct_mulVec ];
-  · simp [ dotProduct ]
-
 open ComplexOrder in
 private lemma inner_cfc_approxLog_ge (ρ σ : MState d) (N : ℕ) (hσ : σ.M.ker ≤ ρ.M.ker) :
     ⟪ρ.M, σ.M.log⟫ ≤ ⟪ρ.M, σ.M.cfc (approxLog N)⟫ := by
@@ -1431,7 +1358,7 @@ private lemma inner_cfc_approxLog_ge (ρ σ : MState d) (N : ℕ) (hσ : σ.M.ke
     rwa [HermitianMat.le_iff, sub_zero] at h
   have hei_nn : 0 ≤ σ.M.H.eigenvalues i := hpsd.eigenvalues_nonneg i
   by_cases hei : σ.M.H.eigenvalues i = 0
-  · rw [eigenWeight_zero_of_eigenvalue_zero ρ σ i hσ hei, mul_zero, mul_zero]
+  · rw [eigenWeight_zero_of_eigenvalue_zero hσ hei, mul_zero, mul_zero]
   · exact mul_le_mul_of_nonneg_right (approxLog_ge_log_pos (lt_of_le_of_ne hei_nn (Ne.symm hei)) N)
       (eigenWeight_nonneg ρ σ i)
 
@@ -1448,20 +1375,19 @@ private lemma tendsto_inner_cfc_approxLog (ρ x : MState d) (hx : x.M.ker ≤ ρ
     rwa [HermitianMat.le_iff, sub_zero] at h
   have hei_nn : 0 ≤ x.M.H.eigenvalues i := hpsd.eigenvalues_nonneg i
   by_cases hei : x.M.H.eigenvalues i = 0
-  · simp [eigenWeight_zero_of_eigenvalue_zero ρ x i hx hei]
+  · simp [eigenWeight_zero_of_eigenvalue_zero hx hei]
   · exact (approxLog_tendsto_at_pos (lt_of_le_of_ne hei_nn (Ne.symm hei))).mul_const _
 
-lemma inner_log_bounded_near (ρ x : MState d) (hx : x.M.ker ≤ ρ.M.ker)
-    (y : ℝ) (hy : ⟪ρ.M, x.M.log⟫ < y) :
-    ∀ᶠ σ in nhds x, σ.M.ker ≤ ρ.M.ker → ⟪ρ.M, σ.M.log⟫ < y := by
-  have h_tendsto := tendsto_inner_cfc_approxLog ρ x hx
-  obtain ⟨N, hN⟩ : ∃ N : ℕ, ⟪ρ.M, x.M.cfc (approxLog N)⟫ < y := by
+lemma inner_log_bounded_near (hx : σ.M.ker ≤ ρ.M.ker) {y : ℝ} (hy : ⟪ρ.M, σ.M.log⟫ < y) :
+    ∀ᶠ x in nhds σ, x.M.ker ≤ ρ.M.ker → ⟪ρ.M, x.M.log⟫ < y := by
+  have h_tendsto := tendsto_inner_cfc_approxLog ρ σ hx
+  obtain ⟨N, hN⟩ : ∃ N : ℕ, ⟪ρ.M, σ.M.cfc (approxLog N)⟫ < y := by
     by_contra h
     push_neg at h
     exact absurd (lt_of_lt_of_le hy (ge_of_tendsto h_tendsto (Filter.Eventually.of_forall h)))
       (lt_irrefl _)
   have h_cont := continuous_inner_cfc_approxLog ρ N
-  have h_lt : ∀ᶠ σ in nhds x, ⟪ρ.M, σ.M.cfc (approxLog N)⟫ < y :=
+  have h_lt : ∀ᶠ x in nhds σ, ⟪ρ.M, x.M.cfc (approxLog N)⟫ < y :=
     h_cont.continuousAt.eventually (gt_mem_nhds hN)
   filter_upwards [h_lt] with σ hσ_lt hσ_ker
   exact lt_of_le_of_lt (inner_cfc_approxLog_ge ρ σ N hσ_ker) hσ_lt
@@ -1517,8 +1443,8 @@ private lemma eigenWeight_eq_zero_iff (ρ x : MState d) (i : d) :
 
 private lemma ker_le_iff_eigenWeight_zero (ρ x : MState d) :
     x.M.ker ≤ ρ.M.ker ↔ ∀ i, x.M.H.eigenvalues i = 0 → eigenWeight ρ x i = 0 := by
-  constructor;
-  · exact fun h i hi => eigenWeight_zero_of_eigenvalue_zero ρ x i h hi;
+  constructor
+  · exact fun h i ↦ eigenWeight_zero_of_eigenvalue_zero h
   · intro h v hv
     obtain ⟨w, hw⟩ : ∃ w : d → ℂ, v = ∑ i, w i • x.M.H.eigenvectorBasis i := by
       exact ⟨ _, Eq.symm ( x.M.H.eigenvectorBasis.sum_repr v ) ⟩;
@@ -1567,7 +1493,7 @@ private lemma inner_cfc_approxLog_tendsto_bot (ρ x : MState d) (hx : ¬(x.M.ker
   · rw [ inner_cfc_eq_sum_eigenWeight, Finset.sum_filter_add_sum_filter_not ];
   · apply tendsto_finset_sum
     intro i hi
-    exact Filter.Tendsto.mul ( by exact ( approxLog_tendsto_at_pos ( show 0 < x.M.H.eigenvalues i from lt_of_le_of_ne (x.eigenvalue_nonneg i) (Ne.symm (by aesop))))) tendsto_const_nhds;
+    exact Filter.Tendsto.mul ((approxLog_tendsto_at_pos ( show 0 < x.M.H.eigenvalues i from lt_of_le_of_ne (x.eigenvalue_nonneg i) (Ne.symm (by aesop))))) tendsto_const_nhds
 
 end lowerSemicontinuous_2
 
@@ -1581,35 +1507,31 @@ theorem qRelativeEnt_lowerSemicontinuous_2 (ρ x : MState d) (hx : ¬(x.M.ker �
       have h_inner_lt_y : Filter.Tendsto (fun N : ℕ => ⟪ρ.M, ρ.M.log⟫ - ⟪ρ.M, x.M.cfc (approxLog N)⟫) Filter.atTop Filter.atTop := by
         exact Filter.Tendsto.add_atTop tendsto_const_nhds ( Filter.tendsto_neg_atBot_atTop.comp ( inner_cfc_approxLog_tendsto_bot ρ x hx ) ) |> Filter.Tendsto.congr ( by aesop ) ;
       convert h_inner_lt_y using 1
-      ext
-      simp [ inner_sub_right ]
+      ext1 N
+      simp [inner_sub_right]
     obtain ⟨N, hN⟩ : ∃ N : ℕ, ⟪ρ.M, ρ.M.log - x.M.cfc (approxLog N)⟫ > y.toReal := by
-      exact ( h_inner_lt_y.eventually_gt_atTop _ ) |> fun h => h.exists
+      exact (h_inner_lt_y.eventually_gt_atTop _ ).exists
     have h_cont : Continuous (fun σ : MState d => ⟪ρ.M, ρ.M.log - σ.M.cfc (approxLog N)⟫) := by
-      have h_cont : Continuous (fun σ : MState d => ⟪ρ.M, σ.M.cfc (approxLog N)⟫) := by
-        apply_rules [ continuous_inner_cfc_approxLog ]
-      convert h_cont.neg.add continuous_const using 2 ; simp [ inner_sub_right ] ; ring!;
+      simp only [inner_sub_right]
+      exact continuous_const.sub (continuous_inner_cfc_approxLog ρ N)
     have h_cont : ∀ᶠ x' in nhds x, ⟪ρ.M, ρ.M.log - x'.M.cfc (approxLog N)⟫ > y.toReal := by
       exact h_cont.continuousAt.eventually ( lt_mem_nhds hN ) |> fun h => h.mono fun x' hx' => hx' |> fun hx'' => by simpa using hx'';
-    filter_upwards [ h_cont ] with x' hx' hx''
+    filter_upwards [h_cont] with x' hx' hx''
     apply lt_of_lt_of_le hx'
     have h_inner_le : ⟪ρ.M, x'.M.log⟫ ≤ ⟪ρ.M, x'.M.cfc (approxLog N)⟫ := by
-      -- Apply the hypothesis `h_inner_le` with the given `N` and the fact that `x'.M.ker ≤ ρ.M.ker`.
-      apply inner_cfc_approxLog_ge ρ x' N hx''
-    convert sub_le_sub_left h_inner_le _ using 1
-    · ring_nf
-      rw [ inner_sub_right ];
-    · rw [ inner_sub_right ]
+      exact inner_cfc_approxLog_ge ρ x' N hx''
+    rw [inner_sub_right, inner_sub_right]
+    exact sub_le_sub_left h_inner_le _
   filter_upwards [ h_inner_lt_y ] with x' hx';
   split_ifs <;> simp_all [ ENNReal.toReal ];
-  · -- Since $y.toNNReal$ is the real part of $y$, and we have $y.toNNReal < ⟪ρ, ρ.log - x'.log⟫_ℝ$, it follows that $y < ⟪ρ, ρ.log - x'.log⟫_ℝ$.
-    have h_y_lt_inner : y.toNNReal < ⟪ρ.M, ρ.M.log - x'.M.log⟫ := by
-      exact hx'
-    convert ENNReal.ofReal_lt_ofReal_iff ( show 0 < ⟪ρ.M, ρ.M.log - x'.M.log⟫ from lt_of_le_of_lt ( by positivity ) h_y_lt_inner ) |>.2 h_y_lt_inner using 1;
-    cases y <;> simp [ ENNReal.ofReal ] at *;
-    rw [ ← NNReal.coe_lt_coe, Real.toNNReal_of_nonneg ( le_of_lt ( lt_of_le_of_lt ( by positivity ) h_y_lt_inner ) ) ];
-    norm_num [ ← ENNReal.ofReal_coe_nnreal ];
-  · exact lt_top_iff_ne_top.mpr ( by aesop )
+  · convert ENNReal.ofReal_lt_ofReal_iff (show 0 < ⟪ρ.M, ρ.M.log - x'.M.log⟫ from lt_of_le_of_lt (by positivity) hx' ) |>.2 hx' using 1
+    cases y
+    · simp at hy
+    simp only [ENNReal.ofReal, ENNReal.toNNReal_coe, Real.toNNReal_coe, ENNReal.coe_lt_coe]
+    rw [← NNReal.coe_lt_coe, Real.toNNReal_of_nonneg (le_trans (by positivity) hx'.le)]
+    simp [← ENNReal.ofReal_coe_nnreal]
+  · rw [lt_top_iff_ne_top, ne_eq] at hy ⊢
+    rwa [EReal.coe_ennreal_eq_top_iff]
 
 /-
 Relative entropy is lower semicontinuous (in each argument, actually, but we only need in the
@@ -1622,19 +1544,20 @@ theorem qRelativeEnt.lowerSemicontinuous (ρ : MState d) : LowerSemicontinuous f
   simp only [zero_lt_one, ↓reduceDIte]
   intro x
   by_cases hx : x.M.ker ≤ ρ.M.ker
-  ·
-    intro y hy;
-    have := @inner_log_bounded_near d _ _ ρ x hx;
+  · intro y hy
     obtain ⟨y', hy'⟩ : ∃ y' : ℝ, y < ENNReal.ofReal y' ∧ y' < ⟪ρ.M, ρ.M.log - x.M.log⟫ := by
       rcases ENNReal.lt_iff_exists_real_btwn.mp hy with ⟨ y', hy₁, hy₂ ⟩;
       rw [ ENNReal.ofReal_lt_iff_lt_toReal ] at hy₂ <;> aesop;
-    have := this ( ⟪ρ.M, ρ.M.log⟫ - y' ) ?_ <;> simp_all [ inner_sub_right ];
-    · filter_upwards [ this ] with σ hσ;
-      split_ifs <;> simp_all [ ENNReal.ofReal ];
-      · refine' lt_of_lt_of_le hy'.1 _;
-        exact_mod_cast le_trans ( max_le ( show y' ≤ ⟪ρ.M, ρ.M.log⟫ - ⟪ρ.M, σ.M.log⟫ from by linarith ) ( show 0 ≤ ⟪ρ.M, ρ.M.log⟫ - ⟪ρ.M, σ.M.log⟫ from by linarith [ show 0 ≤ y' from le_of_not_gt fun h => by norm_num [ Real.toNNReal_of_nonpos h.le ] at hy' ] ) ) le_rfl;
-      · exact hy'.1.trans_le ( by simp );
-    · linarith
+    simp only [↓reduceDIte, inner_sub_right, hx] at hy hy' ⊢
+    have := inner_log_bounded_near hx (y := ⟪ρ.M, ρ.M.log⟫ - y') (by linarith)
+    filter_upwards [this] with σ hσ
+    split
+    · simp_all only [ENNReal.ofReal, forall_const]
+      apply lt_of_lt_of_le hy'.1
+      refine mod_cast max_le (a := y') (b := 0) (c := ⟪ρ.M, ρ.M.log⟫ - ⟪ρ.M, σ.M.log⟫) ?_ ?_
+      · linarith
+      · linarith [ show 0 ≤ y' from le_of_not_gt fun h => by norm_num [ Real.toNNReal_of_nonpos h.le ] at hy' ]
+    · exact hy'.1.trans_le (by simp)
   · intro y hy
     simp only [hx, ↓reduceDIte] at hy ⊢
     have h₂ := qRelativeEnt_lowerSemicontinuous_2 ρ x hx y hy
