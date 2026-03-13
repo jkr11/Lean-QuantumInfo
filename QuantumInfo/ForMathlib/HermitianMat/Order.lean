@@ -71,29 +71,7 @@ theorem posSemidef_iff_spectrum_nonneg [DecidableEq n] (A : HermitianMat n 𝕜)
   exact A.posSemidef_iff_spectrum_Ici
 
 theorem trace_nonneg (hA : 0 ≤ A) : 0 ≤ A.trace := by
-  --TODO Cleanup
-  -- Since A is positive semidefinite, each term in the sum is non-negative. Therefore, the sum itself is non-negative.
-  have h_diag_nonneg : ∀ i, 0 ≤ (A.mat i i) := by
-    -- Since A is positive semidefinite, for any vector v, v* A v ≥ 0. Taking v to be the standard basis vector e_i, we get e_i* A e_i = A i i ≥ 0.
-    have h_diag_nonneg : ∀ i, 0 ≤ (A.mat i i) := by
-      intro i
-      have h_inner : ∀ v : n → 𝕜, 0 ≤ (star v) ⬝ᵥ (A.mat.mulVec v) := by
-        -- Since A is positive semidefinite, by definition, for any vector v, v* A v is non-negative.
-        have h_pos_semidef : ∀ v : n → 𝕜, 0 ≤ (star v) ⬝ᵥ (A.mat.mulVec v) := by
-          intro v
-          exact (by
-          convert hA.2 v using 1;
-          simp +decide [ Matrix.mulVec, dotProduct ]);
-        exact h_pos_semidef
-      classical
-      convert h_inner ( Pi.single i 1 ) using 1
-      simp [ dotProduct, Pi.single_apply ];
-    exact h_diag_nonneg;
-  simp +zetaDelta at *;
-  convert Finset.sum_nonneg (s := .univ) fun i _ => h_diag_nonneg i;
-  have h_trace_eq_sum : A.trace = ∑ i, A i i := by
-    simp [Matrix.trace]
-  rw [← h_trace_eq_sum, RCLike.ofReal_nonneg]
+  exact (RCLike.nonneg_iff.mp (zero_le_iff.mp hA).trace_nonneg).1
 
 theorem trace_pos (hA : 0 < A) : 0 < A.trace := by
   open ComplexOrder in
@@ -257,78 +235,39 @@ theorem inner_mulVec_nonneg (hA : 0 ≤ A) (v : n → 𝕜) :
 
 theorem mem_ker_of_inner_mulVec_zero [DecidableEq n] (hA : 0 ≤ A) (v : n → 𝕜)
     (h : star v ⬝ᵥ A.mat *ᵥ v = 0) : v ∈ A.ker := by
-  --TODO Cleanup
-  -- Since $A$ is positive semidefinite, there exists a matrix $B$ such that $A = B^* B$.
-  obtain ⟨B, hB⟩ : ∃ B : Matrix n n 𝕜, A.mat = B.conjTranspose * B := by
-    have h_pos_semidef : Matrix.IsHermitian A.mat ∧ ∀ v : n → 𝕜, 0 ≤ star v ⬝ᵥ A.mat *ᵥ v := by
-      exact ⟨ A.H, fun v => by simpa [ Matrix.mulVec, dotProduct ] using hA.2 v ⟩;
-    exact Matrix.posSemidef_iff_eq_conjTranspose_mul_self.mp h_pos_semidef;
-  -- Since $v^* A v = 0$, we have $v^* B^* B v = 0$, which implies $B v = 0$.
-  have hBv : B.mulVec v = 0 := by
-    have hBv : star (B.mulVec v) ⬝ᵥ (B.mulVec v) = 0 := by
-      simp_all [  Matrix.dotProduct_mulVec];
-      simp_all [ Matrix.vecMul, dotProduct, mul_comm ];
-      simp_all [ Matrix.mul_apply, Matrix.mulVec, dotProduct ];
-      convert h using 3 ; simp [ mul_comm, mul_left_comm, Finset.mul_sum];
-      exact Finset.sum_comm.trans ( Finset.sum_congr rfl fun _ _ => Finset.sum_congr rfl fun _ _ => by ring );
-    simp_all [ dotProduct, RCLike.ext_iff (K := 𝕜)];
-    funext x
-    norm_num [ RCLike.ext_iff (K := 𝕜) ]
-    have := hBv.1 ▸ Finset.single_le_sum ( fun x _ => add_nonneg ( mul_self_nonneg ( ( B *ᵥ v ) x |> RCLike.re ) ) ( mul_self_nonneg ( ( B *ᵥ v ) x |> RCLike.im ) ) ) ( Finset.mem_univ x )
-    constructor <;> nlinarith only [ this ]
-  simp_all [← Matrix.mulVec_mulVec]
-  replace hB := congr_arg ( fun m => m.mulVec v ) hB; simp_all [ ← Matrix.mulVec_mulVec ] ;
-  exact hB
+  exact ((zero_le_iff.mp hA).dotProduct_mulVec_zero_iff v).mp h
 
 theorem ker_add [DecidableEq n] (hA : 0 ≤ A) (hB : 0 ≤ B) :
     (A + B).ker = A.ker ⊓ B.ker := by
-  --TODO Cleanup
-  -- If $(A + B)v = 0$, then $Av + Bv = 0$. Since $A$ and $B$ are positive semidefinite, this implies $Av = 0$ and $Bv = 0$.
-  have h_subset : ∀ v : n → 𝕜, (A + B).mat *ᵥ v = 0 → A.mat *ᵥ v = 0 ∧ B.mat *ᵥ v = 0 := by
-    intro v hv
-    have h_pos : 0 ≤ star v ⬝ᵥ A.mat *ᵥ v ∧ 0 ≤ star v ⬝ᵥ B.mat *ᵥ v := by
-      exact ⟨inner_mulVec_nonneg hA v, inner_mulVec_nonneg hB v⟩
-    have h_eq_zero : star v ⬝ᵥ A.mat *ᵥ v + star v ⬝ᵥ B.mat *ᵥ v = 0 := by
-      convert congr_arg ( fun w => star v ⬝ᵥ w ) hv using 1 ;
-      simp [ Matrix.add_mulVec ] ; ring_nf!;
-      aesop;
-    have h_eq_zero : star v ⬝ᵥ A.mat *ᵥ v = 0 ∧ star v ⬝ᵥ B.mat *ᵥ v = 0 := by
-      exact ⟨ by simpa using le_antisymm ( le_trans ( le_add_of_nonneg_right h_pos.2 ) h_eq_zero.le ) h_pos.1, by simpa using le_antisymm ( le_trans ( le_add_of_nonneg_left h_pos.1 ) h_eq_zero.le ) h_pos.2 ⟩
-    exact ⟨mem_ker_of_inner_mulVec_zero hA v h_eq_zero.1, mem_ker_of_inner_mulVec_zero hB v h_eq_zero.2 ⟩
-  apply le_antisymm
-  · exact fun v hv => ⟨ h_subset v hv |>.1, h_subset v hv |>.2 ⟩;
-  · rintro v ⟨hvA, hvB⟩
-    change (A + B).mat *ᵥ v = 0
-    convert congr_arg₂ ( · + · ) hvA hvB using 1
-    · ext1
-      simp [ Matrix.add_mulVec ]
-      ring!
-    · norm_num +zetaDelta at *
+  have hA' := zero_le_iff.mp hA
+  have hB' := zero_le_iff.mp hB
+  ext v; simp only [Submodule.mem_inf, mem_ker_iff_mulVec_zero]
+  constructor
+  · intro hv
+    have h3 : star v ⬝ᵥ A.mat *ᵥ v + star v ⬝ᵥ B.mat *ᵥ v = 0 := by
+      rw [← dotProduct_add, ← Matrix.add_mulVec, ← mat_add, hv, dotProduct_zero]
+    obtain ⟨hzA, hzB⟩ := (add_eq_zero_iff_of_nonneg (hA'.2 v) (hB'.2 v)).mp h3
+    exact ⟨(hA'.dotProduct_mulVec_zero_iff v).mp hzA,
+           (hB'.dotProduct_mulVec_zero_iff v).mp hzB⟩
+  · simp +contextual [Matrix.add_mulVec]
 
 theorem ker_sum [DecidableEq n] (f : ι → HermitianMat n 𝕜) (hf : ∀ i, 0 ≤ f i) :
     (∑ i, f i).ker = ⨅ i, (f i).ker := by
-  --TODO Cleanup
-  -- By definition of sum, we know that if $v \in \ker(\sum_{i \in s} f_i)$, then $\sum_{i \in s} (f_i v, v) = 0$.
-  have h_sum_zero : ∀ v : n → 𝕜, (∑ i, f i).mat *ᵥ v = 0 ↔ ∀ i, (f i).mat *ᵥ v = 0 := by
-    intro v
-    constructor
-    · intro hv_zero
-      have h_inner_zero : ∑ i, star v ⬝ᵥ (f i).mat *ᵥ v = 0 := by
-        have h_inner_zero : star v ⬝ᵥ (∑ i, (f i).mat) *ᵥ v = 0 := by
-          aesop
-        convert h_inner_zero using 1
-        simp [Matrix.mulVec, dotProduct];
-        simp only [Finset.mul_sum _ _ _, Matrix.sum_apply, Finset.sum_mul];
-        exact Finset.sum_comm.trans ( Finset.sum_congr rfl fun _ _ => Finset.sum_comm )
-      have h_inner_zero_i : ∀ i, star v ⬝ᵥ (f i).mat *ᵥ v = 0 := by
-        have h_inner_zero_i : ∀ i, 0 ≤ star v ⬝ᵥ (f i).mat *ᵥ v := by
-          exact fun i => inner_mulVec_nonneg (hf i) v;
-        exact fun i => le_antisymm ( le_trans ( Finset.single_le_sum ( fun i _ => h_inner_zero_i i ) ( Finset.mem_univ i ) ) h_inner_zero.le ) ( h_inner_zero_i i )
-      exact fun i ↦ mem_ker_of_inner_mulVec_zero (hf i) v (h_inner_zero_i i)
-    · simp +contextual [Matrix.sum_mulVec]
   ext v
-  simp
-  exact h_sum_zero v
+  simp only [Submodule.mem_iInf, mem_ker_iff_mulVec_zero]
+  constructor
+  · intro hv i
+    have hfi := zero_le_iff.mp (hf i)
+    rw [← hfi.dotProduct_mulVec_zero_iff]
+    have hge : ∀ j, 0 ≤ star v ⬝ᵥ (f j).mat *ᵥ v :=
+      fun j ↦ (zero_le_iff.mp (hf j)).2 v
+    have hsum : ∑ j, star v ⬝ᵥ (f j).mat *ᵥ v = 0 := by
+      rw [← dotProduct_sum, ← Matrix.sum_mulVec, ← mat_finset_sum, hv, dotProduct_zero]
+    exact le_antisymm
+      (hsum ▸ Finset.single_le_sum (fun j _ => hge j) (Finset.mem_univ i))
+      (hge i)
+  · intro h
+    simp [Matrix.sum_mulVec, h]
 
 theorem ker_conj [DecidableEq n] (hA : 0 ≤ A) (B : Matrix n n 𝕜) :
     (A.conj B).ker = Submodule.comap (Matrix.toEuclideanLin B.conjTranspose) A.ker := by
@@ -340,15 +279,24 @@ theorem ker_conj [DecidableEq n] (hA : 0 ≤ A) (B : Matrix n n 𝕜) :
       intro w hw h_zero
       apply HermitianMat.mem_ker_of_inner_mulVec_zero hw w h_zero;
     convert h_inner_zero ( Bᴴ *ᵥ v ) hA _;
-    convert congr_arg ( fun w => star v ⬝ᵥ w ) h using 1;
-    · simp [ Matrix.mulVec_mulVec,dotProduct_comm ];
-      simp [ Matrix.mulVec, dotProduct, Finset.mul_sum, mul_assoc, mul_comm, mul_left_comm, HermitianMat.lin ];
-      simp [ Matrix.toEuclideanLin, Matrix.mulVec, dotProduct, Finset.mul_sum, mul_comm, mul_left_comm, Matrix.mul_apply ];
-      exact Finset.sum_comm.trans ( Finset.sum_congr rfl fun _ _ => Finset.sum_comm.trans ( Finset.sum_congr rfl fun _ _ => Finset.sum_congr rfl fun _ _ => Finset.sum_congr rfl fun _ _ => by ring ) );
-    · simp [ dotProduct ];
-  · simp_all [ HermitianMat.ker, Matrix.mul_assoc ];
-    convert congr_arg ( Matrix.toEuclideanLin B ) h using 1;
-    · simp [HermitianMat.lin, Matrix.toEuclideanLin];
+    convert congr_arg (star v ⬝ᵥ ·) h using 1
+    · simp only [Matrix.mulVec_mulVec, dotProduct_comm]
+      simp only [dotProduct, Matrix.mulVec, mul_comm, Pi.star_apply, Matrix.conjTranspose_apply,
+        RCLike.star_def, star_sum, star_mul', RingHomCompTriple.comp_apply, RingHom.id_apply,
+        Finset.mul_sum, mul_left_comm, mul_assoc, lin, mat_mk, ContinuousLinearMap.coe_mk']
+      simp only [Matrix.mul_apply, mat_apply, Matrix.conjTranspose_apply, RCLike.star_def, mul_comm,
+        Finset.mul_sum, mul_left_comm, Matrix.toEuclideanLin, LinearEquiv.trans_apply,
+        Matrix.toLin'_mul, LinearEquiv.arrowCongr_apply, LinearEquiv.symm_symm,
+        WithLp.linearEquiv_apply, LinearMap.coe_comp, Function.comp_apply, Matrix.toLin'_apply,
+        Matrix.mulVec_mulVec, WithLp.linearEquiv_symm_apply, PiLp.toLp_apply, Matrix.mulVec,
+        dotProduct, PiLp.ofLp_apply]
+      rw [Finset.sum_comm]
+      congr! 1
+      rw [Finset.sum_comm]
+    · simp
+  · simp only [ker, Matrix.mul_assoc, LinearMap.mem_ker]
+    convert congr_arg B.toEuclideanLin h using 1
+    · simp [HermitianMat.lin, Matrix.toEuclideanLin]
     · exact Eq.symm (LinearMap.map_zero (Matrix.toEuclideanLin B))
 
 theorem ker_le_of_le_smul {α : ℝ} [DecidableEq n] (hα : α ≠ 0) (hA : 0 ≤ A) (hAB : A ≤ α • B) : B.ker ≤ A.ker := by
@@ -357,3 +305,150 @@ theorem ker_le_of_le_smul {α : ℝ} [DecidableEq n] (hα : α ≠ 0) (hA : 0 �
 
 --TODO: Positivity extensions for traceLeft, traceRight, rpow, nat powers, inverse function,
 -- the various `proj` function (in Proj.lean), and the inner product.
+
+/-! ## Positivity extensions connecting HermitianMat and Matrix -/
+section MatrixPositivity
+open Lean Meta Mathlib.Meta.Positivity
+
+/-- If a HermitianMat is PSD, then its eigenvalues are nonneg. -/
+theorem eigenvalues_nonneg [DecidableEq n] (hA : 0 ≤ A) (i : n) :
+    0 ≤ A.H.eigenvalues i :=
+  (zero_le_iff.mp hA).eigenvalues_nonneg i
+
+open MatrixOrder in
+/-- If a HermitianMat is PSD, its underlying matrix is nonneg in the Loewner order. -/
+theorem mat_nonneg (hA : 0 ≤ A) : 0 ≤ A.mat :=
+  Matrix.nonneg_iff_posSemidef.mpr (zero_le_iff.mp hA)
+
+open MatrixOrder in
+/-- If a HermitianMat is positive, its underlying matrix is positive in the Loewner order. -/
+theorem mat_pos (hA : 0 < A) : 0 < A.mat :=
+  hA
+
+open MatrixOrder in
+/-- `Mᴴ * M` is nonneg in the Loewner order, for any matrix `M`. -/
+theorem _root_.Matrix.nonneg_conjTranspose_mul_self {m : Type*} [Fintype m]
+    (M : Matrix m n 𝕜) : 0 ≤ M.conjTranspose * M :=
+  Matrix.nonneg_iff_posSemidef.mpr (Matrix.posSemidef_conjTranspose_mul_self M)
+
+open MatrixOrder in
+/-- `M * Mᴴ` is nonneg in the Loewner order, for any matrix `M`. -/
+theorem _root_.Matrix.nonneg_self_mul_conjTranspose {m : Type*} [Fintype m]
+    (M : Matrix n m 𝕜) : 0 ≤ M * M.conjTranspose :=
+  Matrix.nonneg_iff_posSemidef.mpr (Matrix.posSemidef_self_mul_conjTranspose M)
+
+open MatrixOrder in
+theorem subtype_mk_nonneg {M : Matrix m m 𝕜} (h : 0 ≤ M) :
+    0 ≤ (⟨M, (Matrix.LE.le.posSemidef h).isHermitian⟩ : HermitianMat m 𝕜) :=
+  h
+
+open MatrixOrder in
+theorem subtype_mk_pos {M : Matrix m m 𝕜} (h : 0 < M) :
+    0 < (⟨M, (Matrix.LE.le.posSemidef h.le).isHermitian⟩ : HermitianMat m 𝕜) :=
+  h
+
+open MatrixOrder in
+private theorem _root_.Matrix.eigenvalues_nonneg [DecidableEq n] {M : Matrix n n 𝕜} (h : 0 ≤ M) (i : n) :
+    0 ≤ (Matrix.LE.le.posSemidef h).isHermitian.eigenvalues i :=
+  (Matrix.LE.le.posSemidef h).eigenvalues_nonneg i
+
+/-- Positivity extension for `A.mat` where `A : HermitianMat`: nonneg when `0 ≤ A`. -/
+@[positivity HermitianMat.mat _]
+def evalHermitianMatMat : PositivityExt where eval {_u _α} _zα _pα e := do
+  let .app _matFn (A : Expr) ← whnfR e | throwError "not HermitianMat.mat"
+  match ← bestResult A with
+  | (true, pa) =>
+    pure (.positive (← mkAppM ``HermitianMat.mat_pos #[pa]))
+  | (false, pa) =>
+    pure (.nonnegative (← mkAppM ``HermitianMat.mat_nonneg #[pa]))
+
+/-- Positivity extension for `A.mat` where `A : HermitianMat`: nonneg when `0 ≤ A`. -/
+@[positivity Subtype.val (_ : HermitianMat _ _)]
+def evalHermitianMatVal : PositivityExt where eval {_u _α} _zα _pα e := do
+  /- Note: we must not call `whnf` on `e` because `Subtype.val` is a structure
+  projection (reducible), so `whnf` would reduce it and destroy the pattern. -/
+  let A := e.appArg!
+  match ← bestResult A with
+  | (true, pa) =>
+    pure (.positive (← mkAppM ``HermitianMat.mat_pos #[pa]))
+  | (false, pa) =>
+    pure (.nonnegative (← mkAppM ``HermitianMat.mat_nonneg #[pa]))
+
+/-- Positivity extension for `M * Mᴴ` as a Matrix: always nonneg. -/
+@[positivity HMul.hMul _ (Matrix.conjTranspose _)]
+def evalMatrixSelfMulConjTranspose : PositivityExt where eval {_u _α} _zα _pα e := do
+  let .app (.app _hmul _M) Mstar ← whnfR e | throwError "not HMul application"
+  let .app _conjTranspose M' ← whnfR Mstar | throwError "not M * conjTranspose"
+  pure (.nonnegative (← mkAppM ``Matrix.nonneg_self_mul_conjTranspose #[M']))
+
+/-- Positivity extension for `Mᴴ * M` as a Matrix: always nonneg. -/
+@[positivity HMul.hMul (Matrix.conjTranspose _) _]
+def evalMatrixConjTransposeMulSelf : PositivityExt where eval {_u _α} _zα _pα e := do
+  let .app (.app _hmul Mstar) _M ← whnfR e | throwError "not HMul application"
+  let .app _conjTranspose M' ← whnfR Mstar | throwError "not conjTranspose * M"
+  pure (.nonnegative (← mkAppM ``Matrix.nonneg_conjTranspose_mul_self #[M']))
+
+/-- Positivity extension for `⟨M, (pf : M.IsHermitian)⟩` as a HermitianMat:
+equivalent to `0 ≤ M` in `MatrixOrder`. -/
+@[positivity (Subtype.mk _ _ : HermitianMat _ _)]
+def evalHermitianMatMk : PositivityExt where eval {_u _α} _zα _pα e := do
+  let .app (.app _mkFn val) _proof ← whnfR e | throwError "not Subtype.mk"
+  match ← bestResult val with
+  | (true, pa) =>
+    pure (.positive (← mkAppM ``HermitianMat.subtype_mk_pos #[pa]))
+  | (false, pa) =>
+    pure (.nonnegative (← mkAppM ``HermitianMat.subtype_mk_nonneg #[pa]))
+
+/-- Positivity extension for eigenvalues of a Matrix: `0 ≤ (_ : M.IsHermitian).eigenvalues i`.
+Will try to prove `0 ≤ M` in the `MatrixOrder`. If the proof is `A.H`, i.e. M comes from a
+HermitianMat, this will give `0 ≤ A.mat` which becomes `0 ≤ A` later. -/
+@[positivity Matrix.IsHermitian.eigenvalues _ _]
+def evalMatrixEigenvalues : PositivityExt where eval {_u _α} _zα _pα e := do
+  let .app (.app _eigenvaluesFn hProof) _i ← whnfR e | throwError "not eigenvalues application"
+  let pType ← inferType hProof
+  if pType.isAppOf  ``Matrix.IsHermitian then
+    let M ← pure pType.appArg!
+    let (_, pa) ← bestResult M
+    let pa ← try mkAppM ``le_of_lt #[pa] catch _ => pure pa
+    pure (.nonnegative (← mkAppM ``Matrix.eigenvalues_nonneg #[pa, _i]))
+  else
+    throwError "not a Matrix.IsHermitian"
+
+-- Tests
+section tests
+
+variable [DecidableEq n] [DecidableEq m]
+open MatrixOrder
+
+-- Test: eigenvalues nonneg from PSD HermitianMat
+example (A : HermitianMat n ℂ) (hA : 0 < A) (i : n) : 0 ≤ A.H.eigenvalues i := by
+  positivity
+
+-- Test: A.mat nonneg from A nonneg
+example (A : HermitianMat n ℂ) (hA : 0 ≤ A) : 0 ≤ A.mat := by positivity
+example (A : HermitianMat n ℂ) (hA : 0 < A) : 0 < A.mat := by positivity
+example (A : HermitianMat n ℂ) (hA : 0 ≤ A) : 0 ≤ A.val := by positivity
+example (A : HermitianMat n ℂ) (hA : 0 < A) : 0 < A.val := by positivity
+
+-- Test: Mᴴ * M nonneg as Matrix
+example (M : Matrix m n ℂ) : 0 ≤ M.conjTranspose * M := by positivity
+
+-- Test: M * Mᴴ nonneg as Matrix
+example (M : Matrix n m ℂ) : 0 ≤ M * M.conjTranspose := by positivity
+
+-- Test: ⟨Mᴴ * M, _⟩ nonneg as HermitianMat
+example (M : Matrix m n ℂ) :
+    (0 : HermitianMat n ℂ) ≤ ⟨M.conjTranspose * M, Matrix.isHermitian_transpose_mul_self M⟩ := by
+  positivity
+
+-- Test: ⟨M * Mᴴ, _⟩ nonneg as HermitianMat
+example (M : Matrix n m ℝ) :
+    (0 : HermitianMat n ℝ) ≤ ⟨M * M.conjTranspose, Matrix.isHermitian_mul_conjTranspose_self M⟩ := by
+  positivity
+
+example (M : Matrix n n ℂ) (i : n) (A : HermitianMat n ℂ) (hA : 0 ≤ A) :
+    0 ≤ (A + ⟨_, M.isHermitian_mul_conjTranspose_self⟩ + 0).H.eigenvalues i := by
+  positivity
+
+end tests
+end MatrixPositivity

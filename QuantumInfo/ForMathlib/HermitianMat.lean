@@ -11,5 +11,7 @@ import QuantumInfo.ForMathlib.HermitianMat.Order
 import QuantumInfo.ForMathlib.HermitianMat.Proj
 import QuantumInfo.ForMathlib.HermitianMat.Rpow
 import QuantumInfo.ForMathlib.HermitianMat.Reindex
+import QuantumInfo.ForMathlib.HermitianMat.Schatten
 import QuantumInfo.ForMathlib.HermitianMat.Sqrt
 import QuantumInfo.ForMathlib.HermitianMat.Trace
+import QuantumInfo.ForMathlib.HermitianMat.Unitary
